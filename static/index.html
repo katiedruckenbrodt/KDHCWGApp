@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #1E293B;
+      --muted: #64748B;
+      --accent: #2563EB;
+      --green: #059669;
+      --green-light: #ECFDF5;
+      --red: #DC2626;
+      --red-light: #FEF2F2;
+      --amber: #D97706;
+      --amber-light: #FFFBEB;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+    .app-title { font-size: 1rem; font-weight: 700; }
+    .clock { font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ── Tabs ── */
+    .tab-nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+    .tab-nav-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+    }
+    .tab {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Main ── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    /* ── Block cards ── */
+    .block-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cat-color, #94A3B8);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 0.875rem 1rem;
+      margin-bottom: 0.5rem;
+      display: grid;
+      grid-template-columns: 90px 1fr auto;
+      gap: 0.75rem;
+      align-items: start;
+    }
+    .block-card.dim { opacity: 0.45; }
+    .block-time {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.6;
+      white-space: nowrap;
+    }
+    .block-label { font-size: 0.9375rem; font-weight: 500; }
+    .block-note  { font-size: 0.75rem; color: var(--amber); margin-top: 0.2rem; }
+    .expand-btn  {
+      background: none; border: none; font-size: 0.75rem;
+      color: var(--accent); cursor: pointer; padding: 0; margin-top: 0.3rem;
+    }
+    .block-tasks {
+      display: none;
+      font-size: 0.8125rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-top: 0.375rem;
+    }
+    .block-tasks.open { display: block; }
+    .block-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+      white-space: nowrap;
+    }
+    .hours-pill { font-size: 0.75rem; color: var(--muted); }
+
+    /* ── Alerts ── */
+    .alert {
+      border-radius: var(--radius);
+      padding: 0.875rem 1rem;
+      margin-bottom: 0.625rem;
+      border-left: 4px solid;
+    }
+    .alert-red   { background: var(--red-light);   border-color: var(--red); }
+    .alert-amber { background: var(--amber-light); border-color: var(--amber); }
+    .alert-title { font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.2rem; }
+    .alert-body  { font-size: 0.8125rem; color: var(--muted); }
+
+    /* ── Section labels ── */
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin: 1.25rem 0 0.625rem;
+    }
+    .section-label:first-child { margin-top: 0; }
+
+    /* ── Date header ── */
+    .date-header { margin-bottom: 1.25rem; }
+    .date-main { font-size: 1.5rem; font-weight: 700; }
+    .date-sub  { font-size: 0.875rem; color: var(--muted); margin-top: .125rem; }
+
+    /* ── Off day ── */
+    .off-day { text-align: center; padding: 4rem 1rem; color: var(--muted); }
+    .off-day-icon  { font-size: 3rem; margin-bottom: 1rem; }
+    .off-day-title { font-size: 1.25rem; font-weight: 600; color: var(--text); }
+
+    /* ── Checklist ── */
+    .progress-bar  { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: .5rem; }
+    .progress-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width .3s; }
+    .progress-label { font-size: 0.875rem; color: var(--muted); }
+    .checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.625rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .checklist-item:last-child { border-bottom: none; }
+    .checklist-cb   { width: 18px; height: 18px; min-width: 18px; accent-color: var(--green); margin-top: 2px; cursor: pointer; }
+    .checklist-text { font-size: .9rem; line-height: 1.45; flex: 1; }
+    .checklist-text.done { text-decoration: line-through; color: var(--muted); }
+    .done-at { font-size: .72rem; color: var(--muted); margin-top: .125rem; }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th {
+      text-align: left;
+      padding: .625rem .75rem;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td { padding: .625rem .75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Month nav ── */
+    .month-nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+    .month-nav h2 { font-size: 1.25rem; font-weight: 700; min-width: 150px; text-align: center; }
+    .nav-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 1.1rem; color: var(--text);
+      box-shadow: var(--shadow);
+    }
+    .nav-btn:hover { background: var(--bg); }
+
+    /* ── Hours grid ── */
+    .hours-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: .75rem; margin-bottom: 1.5rem; }
+    .hours-day-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .875rem;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .hours-day-card.ok  { border-color: var(--green); }
+    .hours-day-card.low { border-color: var(--red); }
+    .hours-day-name  { font-size: .72rem; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+    .hours-day-value { font-size: 1.5rem; font-weight: 700; margin: .25rem 0; }
+    .hours-day-card.ok  .hours-day-value { color: var(--green); }
+    .hours-day-card.low .hours-day-value { color: var(--red); }
+    .hours-tick { font-size: .7rem; }
+    .hours-day-card.ok  .hours-tick { color: var(--green); }
+    .hours-day-card.low .hours-tick { color: var(--red); }
+
+    /* ── Misc ── */
+    .loading { color: var(--muted); font-size: .875rem; padding: 2rem 0; text-align: center; }
+    .error   { color: var(--red); font-size: .875rem; padding: 1rem; background: var(--red-light); border-radius: var(--radius); }
+
+    @media (max-width: 600px) {
+      .block-card { grid-template-columns: 75px 1fr auto; gap: .5rem; }
+      .hours-day-value { font-size: 1.125rem; }
+      main { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <span class="app-title">Schedule</span>
+    <span class="clock" id="clock"></span>
+  </div>
+</header>
+
+<div class="tab-nav">
+  <div class="tab-nav-inner">
+    <button class="tab active" data-tab="today">Today</button>
+    <button class="tab" data-tab="checklist">Checklist</button>
+    <button class="tab" data-tab="week">Week</button>
+    <button class="tab" data-tab="calendar">Calendar</button>
+    <button class="tab" data-tab="hours">Hours</button>
+  </div>
+</div>
+
+<main>
+  <div id="today"     class="panel active"></div>
+  <div id="checklist" class="panel"></div>
+  <div id="week"      class="panel"></div>
+  <div id="calendar"  class="panel"></div>
+  <div id="hours"     class="panel"></div>
+</main>
+
+<script>
+// ── Color map ────────────────────────────────────────────────────────────
+const COLORS = {
+  TRI:'#2563EB', PFM:'#059669', CMV:'#0891B2', BAR:'#7C3AED',
+  FLY:'#D97706', FRO:'#DC2626', CLO:'#DB2777', KNB:'#4B5563',
+  MUL:'#4F46E5', CAM:'#65A30D', VEL:'#0D9488',
+  Admin:'#475569', Close:'#1E40AF', Lunch:'#9CA3AF', 'Wrap-up':'#1F2937'
+}
+const clr = c => COLORS[c] || '#94A3B8'
+
+// ── Clock ────────────────────────────────────────────────────────────────
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', hour12:true})
+}
+tick(); setInterval(tick, 1000)
+
+// ── Tabs ─────────────────────────────────────────────────────────────────
+const LOADERS = {}
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'))
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
+    btn.classList.add('active')
+    const tab = btn.dataset.tab
+    document.getElementById(tab).classList.add('active')
+    LOADERS[tab]?.()
+  })
+})
+
+// ── Fetch helpers ─────────────────────────────────────────────────────────
+async function api(path, method='GET') {
+  const r = await fetch(path, {method})
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+  if (r.status === 204) return null
+  return r.json()
+}
+
+function fmtTime(t) {
+  const [h, m] = t.split(':').map(Number)
+  return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`
+}
+
+function fmtDate(iso) {
+  const [y,mo,d] = iso.split('-').map(Number)
+  return new Date(y, mo-1, d).toLocaleDateString('en-US', {month:'short', day:'numeric'})
+}
+
+function tasks2html(tasks) {
+  return tasks.split(';').map(t=>t.trim()).filter(Boolean).map(t=>`• ${t}`).join('<br>')
+}
+
+function blockCard(b, showBiweeklyLabel=false) {
+  const c = clr(b.category)
+  const isOff = b.biweekly && b.active === false
+  const taskHtml = b.tasks
+    ? `<button class="expand-btn" onclick="toggleTasks(this)">▸ Show tasks</button>
+       <div class="block-tasks">${tasks2html(b.tasks)}</div>`
+    : ''
+  const bwLabel = showBiweeklyLabel && b.biweekly
+    ? `<span style="font-size:.72rem;color:var(--muted)"> · Biweekly</span>` : ''
+  const note = isOff ? `<div class="block-note">${b.note}</div>` : ''
+  return `
+    <div class="block-card${isOff?' dim':''}" style="--cat-color:${c}">
+      <div class="block-time">${fmtTime(b.start)}<br>↓<br>${fmtTime(b.end)}</div>
+      <div>
+        <div class="block-label">${b.label}${bwLabel}</div>
+        ${note}${taskHtml}
+      </div>
+      <div class="block-meta">
+        <span class="badge" style="background:${c}">${b.category}</span>
+        <span class="hours-pill">${b.hours}h</span>
+      </div>
+    </div>`
+}
+
+function toggleTasks(btn) {
+  const tasks = btn.nextElementSibling
+  const open = tasks.classList.toggle('open')
+  btn.textContent = open ? '▾ Hide tasks' : '▸ Show tasks'
+}
+
+// ── Today ─────────────────────────────────────────────────────────────────
+async function loadToday() {
+  const el = document.getElementById('today')
+  el.innerHTML = '<p class="loading">Loading…</p>'
+  try { renderToday(el, await api('/schedule/today')) }
+  catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
+}
+
+function renderToday(el, data) {
+  const [y,m,d] = data.date.split('-').map(Number)
+  const dateStr = new Date(y,m-1,d).toLocaleDateString('en-US',
+    {weekday:'long', month:'long', day:'numeric', year:'numeric'})
+
+  if (!data.workday) {
+    el.innerHTML = `
+      <div class="date-header"><div class="date-main">${dateStr}</div></div>
+      <div class="off-day">
+        <div class="off-day-icon">${data.holiday?'🏖️':'🌅'}</div>
+        <div class="off-day-title">${data.holiday?'Holiday':'Weekend'} — enjoy your time off</div>
+      </div>`
+    return
+  }
+
+  let html = `<div class="date-header"><div class="date-main">${dateStr}</div></div>`
+
+  data.close_due_today?.forEach(r => {
+    html += `<div class="alert alert-red">
+      <div class="alert-title">⚠️ Close Due Today: ${r.client}</div>
+      <div class="alert-body">Client deadline ${fmtDate(r.client_deadline)} · Rule: ${r.rule}${r.notes?` · ${r.notes}`:''}</div>
+    </div>`
+  })
+
+  data.monthly_tasks_today?.forEach(r => {
+    html += `<div class="alert alert-amber">
+      <div class="alert-title">📋 Monthly Task Due: ${r.client}</div>
+      <div class="alert-body">${r.tasks}</div>
+    </div>`
+  })
+
+  html += '<div class="section-label">Schedule</div>'
+  data.blocks.forEach(b => { html += blockCard(b) })
+  el.innerHTML = html
+}
+
+// ── Checklist ─────────────────────────────────────────────────────────────
+let clDate = null
+
+async function loadChecklist() {
+  const el = document.getElementById('checklist')
+  el.innerHTML = '<p class="loading">Loading…</p>'
+  try {
+    const data = await api('/checklist/today')
+    clDate = data.date
+    renderChecklist(el, data)
+  } catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
+}
+
+function renderChecklist(el, data) {
+  const total = data.items.length
+  const done  = data.items.filter(i=>i.done).length
+  const pct   = total ? Math.round(done/total*100) : 0
+
+  const phases = [...new Set(data.items.map(i=>i.phase))]
+
+  let html = `
+    <div class="date-header">
+      <div class="date-main">Daily Checklist</div>
+      <div class="date-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+    </div>
+    <div style="margin-bottom:1.25rem">
+      <div class="progress-label">${done} of ${total} complete</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>`
+
+  phases.forEach(phase => {
+    const items = data.items.filter(i=>i.phase===phase)
+    html += `<div class="section-label">${phase}</div>
+      <div class="card" style="padding:.25rem 1.25rem">`
+    items.forEach(item => {
+      const doneAt = item.done_at
+        ? new Date(item.done_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+        : ''
+      html += `
+        <div class="checklist-item" id="cli-${item.id}">
+          <input type="checkbox" class="checklist-cb" ${item.done?'checked':''}
+            onchange="toggleItem(${item.id}, this.checked)">
+          <div>
+            <div class="checklist-text${item.done?' done':''}">${item.text}</div>
+            ${item.done ? `<div class="done-at">✓ ${doneAt}</div>` : ''}
+          </div>
+        </div>`
+    })
+    html += '</div>'
+  })
+
+  el.innerHTML = html
+}
+
+async function toggleItem(itemId, checked) {
+  try {
+    await api(`/checklist/${clDate}/${itemId}`, checked ? 'POST' : 'DELETE')
+    renderChecklist(document.getElementById('checklist'), await api('/checklist/today'))
+  } catch(e) {
+    alert(`Could not update: ${e.message}`)
+    loadChecklist()
+  }
+}
+
+// ── Week ──────────────────────────────────────────────────────────────────
+async function loadWeek() {
+  const el = document.getElementById('week')
+  el.innerHTML = '<p class="loading">Loading…</p>'
+  try { renderWeek(el, await api('/schedule/week')) }
+  catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
+}
+
+function renderWeek(el, data) {
+  const NAMES = {mon:'Monday',tue:'Tuesday',wed:'Wednesday',thu:'Thursday',fri:'Friday'}
+  let html = ''
+  Object.entries(data).forEach(([day, blocks]) => {
+    const hrs = blocks.reduce((s,b)=>s + (b.category!=='Lunch'?b.hours:0), 0)
+    html += `<div class="section-label">${NAMES[day]} <span style="font-weight:400">${hrs.toFixed(2)}h worked</span></div>`
+    blocks.forEach(b => { html += blockCard(b, true) })
+  })
+  el.innerHTML = html
+}
+
+// ── Calendar ──────────────────────────────────────────────────────────────
+let calY = new Date().getFullYear()
+let calM = new Date().getMonth() + 1
+
+async function loadCalendar() { await fetchCalendar(calY, calM) }
+
+async function fetchCalendar(y, m) {
+  const el = document.getElementById('calendar')
+  el.innerHTML = '<p class="loading">Loading…</p>'
+  try { renderCalendar(el, await api(`/calendar/${y}/${m}`), y, m) }
+  catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
+}
+
+function renderCalendar(el, data, y, m) {
+  const monthName = new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})
+
+  let html = `
+    <div class="month-nav">
+      <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+      <h2>${monthName}</h2>
+      <button class="nav-btn" onclick="changeMonth(1)">›</button>
+    </div>`
+
+  if (data.monthly_tasks.length) {
+    html += `<div class="section-label">Monthly Tasks</div>
+      <div class="card" style="padding:0"><div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Client</th><th>Tasks</th></tr></thead><tbody>`
+    data.monthly_tasks.forEach(r => {
+      html += `<tr>
+        <td><strong>${fmtDate(r.date)}</strong><br>
+          <span style="font-size:.75rem;color:var(--muted)">${r.day}${!r.on_business_day?' ⚠️':''}</span></td>
+        <td><span class="badge" style="background:${clr(r.client)}">${r.client}</span></td>
+        <td style="font-size:.8125rem">${r.tasks}</td>
+      </tr>`
+    })
+    html += '</tbody></table></div></div>'
+  }
+
+  html += `<div class="section-label">Close Deadlines
+    <span style="font-weight:400">(${data.buffer_bds} BD buffer applied)</span></div>
+    <div class="card" style="padding:0"><div class="table-wrap"><table>
+    <thead><tr><th>Client</th><th>Rule</th><th>Client Deadline</th><th>Buffer</th><th>Due Date</th><th>Notes</th></tr></thead><tbody>`
+
+  data.close_deadlines.forEach(r => {
+    html += `<tr>
+      <td><span class="badge" style="background:${clr(r.client)}">${r.client}</span></td>
+      <td>${r.rule}</td>
+      <td>${fmtDate(r.client_deadline)}</td>
+      <td>${r.bds_early > 0 ? `−${r.bds_early} BD` : '—'}</td>
+      <td><strong>${fmtDate(r.due_date)}</strong> <span style="color:var(--muted)">${r.due_day}</span></td>
+      <td style="font-size:.8125rem;color:var(--muted)">${r.notes||''}</td>
+    </tr>`
+  })
+  html += '</tbody></table></div></div>'
+  el.innerHTML = html
+}
+
+function changeMonth(delta) {
+  calM += delta
+  if (calM > 12) { calM=1; calY++ }
+  if (calM < 1)  { calM=12; calY-- }
+  fetchCalendar(calY, calM)
+}
+
+// ── Hours ─────────────────────────────────────────────────────────────────
+async function loadHours() {
+  const el = document.getElementById('hours')
+  el.innerHTML = '<p class="loading">Loading…</p>'
+  try { renderHours(el, await api('/hours/summary')) }
+  catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
+}
+
+function renderHours(el, data) {
+  const DAYS = ['mon','tue','wed','thu','fri']
+  const SHORT = {mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri'}
+
+  let html = `<div class="section-label">Worked Hours Per Day <span style="font-weight:400">(min ${data.min_hours_per_day}h)</span></div>
+    <div class="hours-grid">`
+
+  DAYS.forEach(d => {
+    const h = data.worked_hours[d]
+    const ok = data.meets_minimum[d]
+    html += `<div class="hours-day-card ${ok?'ok':'low'}">
+      <div class="hours-day-name">${SHORT[d]}</div>
+      <div class="hours-day-value">${h}h</div>
+      <div class="hours-tick">${ok?'✓ meets min':'✗ short'}</div>
+    </div>`
+  })
+  html += '</div>'
+
+  html += `<div class="section-label">Hours by Category</div>
+    <div class="card" style="padding:0"><div class="table-wrap"><table>
+    <thead><tr><th>Category</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Week</th><th>Target</th><th>Variance</th></tr></thead><tbody>`
+
+  data.by_category.sort((a,b)=>b.week-a.week).forEach(row => {
+    const v = row.variance
+    const vStyle = v===null ? '' : v>=0 ? 'color:var(--green)' : 'color:var(--red)'
+    const vText  = v===null ? '—' : (v>=0 ? `+${v}` : v)
+    html += `<tr>
+      <td><span class="badge" style="background:${clr(row.category)}">${row.category}</span></td>
+      ${DAYS.map(d=>`<td>${row[d]||0}</td>`).join('')}
+      <td><strong>${row.week}</strong></td>
+      <td>${row.target??'—'}</td>
+      <td style="${vStyle}">${vText}</td>
+    </tr>`
+  })
+  html += '</tbody></table></div></div>'
+  el.innerHTML = html
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+LOADERS.today     = loadToday
+LOADERS.checklist = loadChecklist
+LOADERS.week      = loadWeek
+LOADERS.calendar  = loadCalendar
+LOADERS.hours     = loadHours
+
+loadToday()
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
@@ -237,9 +238,9 @@ async def lifespan(app):
 
 app = FastAPI(title="Remote Accounting Associate – Schedule", lifespan=lifespan)
 
-@app.get("/", tags=["health"])
+@app.get("/", response_class=HTMLResponse, tags=["health"])
 def root():
-    return {"status": "ok"}
+    return (BASE / "static" / "index.html").read_text(encoding="utf-8")
 
 app.include_router(crud(Client, ClientIn, "/clients", "code", str, validate_client))
 app.include_router(crud(Block, BlockIn, "/blocks", "id", int, validate_block))
