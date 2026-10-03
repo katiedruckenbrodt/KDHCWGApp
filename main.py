@@ -236,6 +236,11 @@ async def lifespan(app):
     yield
 
 app = FastAPI(title="Remote Accounting Associate – Schedule", lifespan=lifespan)
+
+@app.get("/", tags=["health"])
+def root():
+    return {"status": "ok"}
+
 app.include_router(crud(Client, ClientIn, "/clients", "code", str, validate_client))
 app.include_router(crud(Block, BlockIn, "/blocks", "id", int, validate_block))
 app.include_router(crud(MonthlyTask, MonthlyTaskIn, "/monthly-tasks", "id", int, validate_monthly))
