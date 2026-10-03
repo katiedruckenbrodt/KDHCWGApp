@@ -414,6 +414,14 @@ let clDate = null
 
 async function loadChecklist() {
   const el = document.getElementById('checklist')
+  const dow = new Date().getDay() // 0 = Sun, 6 = Sat
+  if (dow === 0 || dow === 6) {
+    el.innerHTML = `<div class="off-day">
+      <div class="off-day-icon">🌅</div>
+      <div class="off-day-title">No checklist on weekends</div>
+    </div>`
+    return
+  }
   el.innerHTML = '<p class="loading">Loading…</p>'
   try {
     const data = await api('/checklist/today')
