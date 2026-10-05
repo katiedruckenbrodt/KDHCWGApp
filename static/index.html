@@ -8,20 +8,21 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #F8FAFC;
-      --surface: #FFFFFF;
-      --border: #E2E8F0;
-      --text: #1E293B;
-      --muted: #64748B;
-      --accent: #2563EB;
-      --green: #059669;
-      --green-light: #ECFDF5;
-      --red: #DC2626;
-      --red-light: #FEF2F2;
-      --amber: #D97706;
-      --amber-light: #FFFBEB;
+      --bg: #fdfbf7;
+      --surface: #ffffff;
+      --border: #dbe5de;
+      --text: #1c2240;
+      --muted: #656a85;
+      --accent: #3d4b8e;
+      --accent-light: #edeef7;
+      --green: #3d6748;
+      --green-light: #edf2ee;
+      --red: #b33a3a;
+      --red-light: #f9eded;
+      --amber: #8a6e2f;
+      --amber-light: #faf4e9;
       --radius: 8px;
-      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+      --shadow: 0 1px 3px rgba(28,34,64,.07), 0 1px 2px rgba(28,34,64,.04);
     }
 
     body {
@@ -33,8 +34,7 @@
 
     /* ── Header ── */
     header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      background: #1c2240;
       padding: 0 1.5rem;
       position: sticky;
       top: 0;
@@ -48,13 +48,13 @@
       justify-content: space-between;
       height: 52px;
     }
-    .app-title { font-size: 1rem; font-weight: 700; }
-    .clock { font-size: 0.875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .app-title { font-size: 1rem; font-weight: 700; color: #ffffff; letter-spacing: .01em; }
+    .clock { font-size: 0.875rem; color: rgba(255,255,255,.55); font-variant-numeric: tabular-nums; }
 
     /* ── Tabs ── */
     .tab-nav {
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      border-bottom: 2px solid var(--border);
       padding: 0 1.5rem;
     }
     .tab-nav-inner {
@@ -284,12 +284,23 @@
 </main>
 
 <script>
-// ── Color map ────────────────────────────────────────────────────────────
+// ── Color map (brand palette) ─────────────────────────────────────────────
 const COLORS = {
-  TRI:'#2563EB', PFM:'#059669', CMV:'#0891B2', BAR:'#7C3AED',
-  FLY:'#D97706', FRO:'#DC2626', CLO:'#DB2777', KNB:'#4B5563',
-  MUL:'#4F46E5', CAM:'#65A30D', VEL:'#0D9488',
-  Admin:'#475569', Close:'#1E40AF', Lunch:'#9CA3AF', 'Wrap-up':'#1F2937'
+  TRI:    '#3d4b8e',  // brand blue
+  PFM:    '#3d6748',  // brand green
+  CMV:    '#4d5eb2',  // lighter blue
+  BAR:    '#242b51',  // dark navy
+  FLY:    '#5e8d6a',  // medium green
+  FRO:    '#8a6e2f',  // warm amber-brown
+  CLO:    '#4d815a',  // medium-light green
+  KNB:    '#7b7f96',  // muted blue-gray
+  MUL:    '#394062',  // mid navy
+  CAM:    '#709a7a',  // soft green
+  VEL:    '#5e6eb9',  // periwinkle
+  Admin:  '#656a85',  // slate
+  Close:  '#1c2240',  // brand navy
+  Lunch:  '#8a959c',  // steel
+  'Wrap-up': '#394062'
 }
 const clr = c => COLORS[c] || '#94A3B8'
 
