@@ -1,15 +1,26 @@
 import json
+import logging
+import os
+import smtplib
 from calendar import monthrange
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+
+log = logging.getLogger(__name__)
+ALERT_TO = "katie.druckenbrodt@wgcpa.com"
+scheduler = BackgroundScheduler()
 
 BASE = Path(__file__).parent
 SEED_FILE = BASE / "schedule.json"
@@ -206,6 +217,76 @@ def crud(model, in_model, prefix, pk_name, pk_type, validate=None):
     return r
 
 
+# ---------------- Daily alert ----------------
+def send_daily_alert():
+    email_user = os.getenv("EMAIL_USER")
+    email_pass = os.getenv("EMAIL_PASSWORD")
+    if not email_user or not email_pass:
+        log.warning("EMAIL_USER / EMAIL_PASSWORD not set — skipping alert")
+        return
+
+    today = date.today()
+    if today.weekday() >= 5:
+        return
+
+    with Session(engine) as s:
+        items = s.exec(select(ChecklistItem).order_by(ChecklistItem.sort_order)).all()
+        done_ids = {c.item_id for c in s.exec(
+            select(ChecklistDone).where(ChecklistDone.day == today)).all()}
+        items = [i for i in items if not i.fridays_only or today.weekday() == 4]
+        incomplete = [i for i in items if i.id not in done_ids]
+
+    if not incomplete:
+        log.info("Daily alert: all checklist items complete — nothing to send")
+        return
+
+    date_str = today.strftime("%A, %B %-d, %Y")
+    count = len(incomplete)
+    subject = f"Reminder: {count} checklist item{'s' if count != 1 else ''} still incomplete"
+
+    phases = list(dict.fromkeys(i.phase for i in incomplete))
+    rows = ""
+    for phase in phases:
+        rows += f"""
+        <tr><td colspan="2" style="padding:12px 0 4px;font-size:11px;font-weight:700;
+            text-transform:uppercase;letter-spacing:.06em;color:#64748B;
+            border-top:1px solid #E2E8F0">{phase}</td></tr>"""
+        for item in [i for i in incomplete if i.phase == phase]:
+            rows += f"""
+        <tr><td style="padding:6px 0;font-size:14px;color:#1E293B;vertical-align:top;
+            width:20px">☐</td>
+            <td style="padding:6px 0 6px 8px;font-size:14px;color:#1E293B;line-height:1.4">{item.text}</td></tr>"""
+
+    html = f"""<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,
+'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1E293B">
+  <h2 style="margin:0 0 4px">📋 3 PM Checklist Reminder</h2>
+  <p style="margin:0 0 24px;color:#64748B;font-size:14px">{date_str}</p>
+  <p style="margin:0 0 16px;font-size:15px">
+    <strong>{count}</strong> item{'s' if count != 1 else ''} still incomplete:
+  </p>
+  <table style="width:100%;border-collapse:collapse">{rows}
+  </table>
+  <hr style="border:none;border-top:1px solid #E2E8F0;margin:24px 0">
+  <p style="font-size:12px;color:#94A3B8;margin:0">
+    Sent from your Schedule app · <a href="https://your-app.up.railway.app" style="color:#94A3B8">Open app</a>
+  </p>
+</body></html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"]    = email_user
+    msg["To"]      = ALERT_TO
+    msg.attach(MIMEText(html, "html"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(email_user, email_pass)
+            smtp.send_message(msg)
+        log.info("Daily alert sent: %d incomplete items", count)
+    except Exception as e:
+        log.error("Failed to send daily alert: %s", e)
+
+
 # ---------------- Seeding ----------------
 def seed():
     SQLModel.metadata.create_all(engine)
@@ -234,7 +315,15 @@ def seed():
 @asynccontextmanager
 async def lifespan(app):
     seed()
+    scheduler.add_job(
+        send_daily_alert,
+        CronTrigger(hour=15, minute=0, day_of_week="mon-fri", timezone="America/Chicago"),
+        id="daily_alert",
+        replace_existing=True,
+    )
+    scheduler.start()
     yield
+    scheduler.shutdown()
 
 app = FastAPI(title="Remote Accounting Associate – Schedule", lifespan=lifespan)
 
@@ -261,6 +350,12 @@ def update_settings(data: SettingsIn, s: Session = Depends(get_session)):
         setattr(st, k, v)
     s.add(st); s.commit(); s.refresh(st)
     return st
+
+@app.post("/admin/test-alert", tags=["settings"])
+def test_alert():
+    """Send the daily alert right now (for testing)."""
+    send_daily_alert()
+    return {"status": "sent (check logs if nothing arrived)"}
 
 @app.post("/admin/reseed", tags=["settings"])
 def reseed():
