@@ -249,6 +249,75 @@
     .loading { color: var(--muted); font-size: .875rem; padding: 2rem 0; text-align: center; }
     .error   { color: var(--red); font-size: .875rem; padding: 1rem; background: var(--red-light); border-radius: var(--radius); }
 
+    /* ── Task form ── */
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+      display: block;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: .375rem;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="date"],
+    .form-group select {
+      width: 100%;
+      padding: .5rem .75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: .9rem;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+    }
+    .form-group input:focus,
+    .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+    .radio-row { display: flex; gap: 1.25rem; }
+    .radio-row label { display: flex; align-items: center; gap: .4rem; font-size: .9rem;
+      font-weight: 500; color: var(--text); text-transform: none; letter-spacing: 0; cursor: pointer; }
+    .day-pills { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .day-pill {
+      display: flex; align-items: center; gap: .3rem;
+      padding: .35rem .75rem;
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      font-size: .8rem; font-weight: 600;
+      cursor: pointer; user-select: none;
+      transition: background .12s, border-color .12s, color .12s;
+      color: var(--muted);
+    }
+    .day-pill input { display: none; }
+    .day-pill.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius);
+      padding: .6rem 1.25rem; font-size: .9rem; font-weight: 600;
+      cursor: pointer; transition: opacity .15s;
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-ghost {
+      background: none; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .5rem 1rem;
+      font-size: .875rem; color: var(--muted); cursor: pointer;
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .task-row {
+      display: flex; align-items: flex-start; gap: .75rem;
+      padding: .75rem 0; border-bottom: 1px solid var(--border);
+    }
+    .task-row:last-child { border-bottom: none; }
+    .task-info { flex: 1; }
+    .task-text { font-size: .9rem; font-weight: 500; }
+    .task-meta { font-size: .75rem; color: var(--muted); margin-top: .2rem; }
+    .delete-btn {
+      background: none; border: none; font-size: 1rem;
+      color: var(--muted); cursor: pointer; padding: .1rem .25rem;
+      border-radius: 4px; line-height: 1;
+    }
+    .delete-btn:hover { color: var(--red); background: var(--red-light); }
+
     @media (max-width: 600px) {
       .block-card { grid-template-columns: 75px 1fr auto; gap: .5rem; }
       .hours-day-value { font-size: 1.125rem; }
@@ -269,6 +338,7 @@
   <div class="tab-nav-inner">
     <button class="tab active" data-tab="today">Today</button>
     <button class="tab" data-tab="checklist">Checklist</button>
+    <button class="tab" data-tab="tasks">Tasks</button>
     <button class="tab" data-tab="week">Week</button>
     <button class="tab" data-tab="calendar">Calendar</button>
     <button class="tab" data-tab="hours">Hours</button>
@@ -278,6 +348,7 @@
 <main>
   <div id="today"     class="panel active"></div>
   <div id="checklist" class="panel"></div>
+  <div id="tasks"     class="panel"></div>
   <div id="week"      class="panel"></div>
   <div id="calendar"  class="panel"></div>
   <div id="hours"     class="panel"></div>
@@ -325,8 +396,10 @@ document.querySelectorAll('.tab').forEach(btn => {
 })
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────
-async function api(path, method='GET') {
-  const r = await fetch(path, {method})
+async function api(path, method='GET', body=null) {
+  const opts = {method, headers: {}}
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body) }
+  const r = await fetch(path, opts)
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
   if (r.status === 204) return null
   return r.json()
@@ -469,7 +542,7 @@ function renderChecklist(el, data) {
       html += `
         <div class="checklist-item" id="cli-${item.id}">
           <input type="checkbox" class="checklist-cb" ${item.done?'checked':''}
-            onchange="toggleItem(${item.id}, this.checked)">
+            onchange="toggleItem(${item.id}, '${item.item_type||'checklist'}', this.checked)">
           <div>
             <div class="checklist-text${item.done?' done':''}">${item.text}</div>
             ${item.done ? `<div class="done-at">✓ ${doneAt}</div>` : ''}
@@ -482,9 +555,12 @@ function renderChecklist(el, data) {
   el.innerHTML = html
 }
 
-async function toggleItem(itemId, checked) {
+async function toggleItem(itemId, itemType, checked) {
+  const path = itemType === 'custom'
+    ? `/checklist/${clDate}/custom/${itemId}`
+    : `/checklist/${clDate}/${itemId}`
   try {
-    await api(`/checklist/${clDate}/${itemId}`, checked ? 'POST' : 'DELETE')
+    await api(path, checked ? 'POST' : 'DELETE')
     renderChecklist(document.getElementById('checklist'), await api('/checklist/today'))
   } catch(e) {
     alert(`Could not update: ${e.message}`)
@@ -621,9 +697,156 @@ function renderHours(el, data) {
   el.innerHTML = html
 }
 
+// ── Tasks ─────────────────────────────────────────────────────────────────
+const PHASES = ['Start of day','Throughout the day','Afternoon','Before signing off','Tasks']
+const DAY_LABELS = {mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri'}
+
+async function loadTasks() {
+  const el = document.getElementById('tasks')
+  el.innerHTML = '<p class="loading">Loading…</p>'
+  try {
+    const tasks = await api('/custom-tasks')
+    renderTasks(el, tasks)
+  } catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
+}
+
+function renderTasks(el, tasks) {
+  const phaseOpts = PHASES.map(p => `<option value="${p}">${p}</option>`).join('')
+
+  const formHtml = `
+    <div class="date-header">
+      <div class="date-main">My Tasks</div>
+      <div class="date-sub">Tasks added here appear automatically in the daily checklist</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:1rem">Add a Task</div>
+      <form id="task-form" onsubmit="submitTask(event)">
+        <div class="form-group">
+          <label>Task</label>
+          <input type="text" id="tf-text" placeholder="What needs to be done?" required>
+        </div>
+        <div class="form-group">
+          <label>Checklist section</label>
+          <select id="tf-phase">${phaseOpts}</select>
+        </div>
+        <div class="form-group">
+          <label>Frequency</label>
+          <div class="radio-row">
+            <label><input type="radio" name="tf-type" value="recurring" checked onchange="taskTypeChange()"> Recurring</label>
+            <label><input type="radio" name="tf-type" value="one_off" onchange="taskTypeChange()"> One-off</label>
+          </div>
+        </div>
+        <div id="tf-recurring-fields">
+          <div class="form-group">
+            <label>Repeat on</label>
+            <div class="day-pills">
+              ${['mon','tue','wed','thu','fri'].map(d =>
+                `<label class="day-pill on" id="pill-${d}" onclick="togglePill(this,'${d}')">
+                  <input type="checkbox" value="${d}" checked>${DAY_LABELS[d]}
+                </label>`).join('')}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>End date <span style="font-weight:400">(optional)</span></label>
+            <input type="date" id="tf-end">
+          </div>
+        </div>
+        <div id="tf-oneoff-fields" style="display:none">
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="tf-date">
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">Add Task</button>
+      </form>
+    </div>`
+
+  let listHtml = `<div class="section-label">Your Tasks (${tasks.length})</div>`
+  if (!tasks.length) {
+    listHtml += `<p style="color:var(--muted);font-size:.875rem">No tasks yet — add one above.</p>`
+  } else {
+    listHtml += `<div class="card" style="padding:.25rem 1.25rem">`
+    tasks.forEach(t => {
+      const isOneOff = t.one_off_date !== null
+      let meta = ''
+      if (isOneOff) {
+        meta = `One-off · ${fmtDate(t.one_off_date)}`
+      } else {
+        const days = t.recur_days
+          ? t.recur_days.split(',').map(d => DAY_LABELS[d]).join(', ')
+          : 'Every weekday'
+        meta = `Recurring · ${days}`
+        if (t.recur_end) meta += ` · until ${fmtDate(t.recur_end)}`
+      }
+      listHtml += `
+        <div class="task-row">
+          <div class="task-info">
+            <div class="task-text">${t.text}</div>
+            <div class="task-meta">
+              <span class="badge" style="background:var(--accent);font-size:.7rem">${t.phase}</span>
+              &nbsp;${meta}
+            </div>
+          </div>
+          <button class="delete-btn" onclick="deleteTask(${t.id})" title="Delete">×</button>
+        </div>`
+    })
+    listHtml += `</div>`
+  }
+
+  el.innerHTML = formHtml + listHtml
+}
+
+function taskTypeChange() {
+  const isOneOff = document.querySelector('input[name="tf-type"]:checked').value === 'one_off'
+  document.getElementById('tf-recurring-fields').style.display = isOneOff ? 'none' : ''
+  document.getElementById('tf-oneoff-fields').style.display    = isOneOff ? '' : 'none'
+}
+
+function togglePill(label, day) {
+  const cb = label.querySelector('input')
+  // the click will toggle the checkbox; we sync the class after a tick
+  setTimeout(() => label.classList.toggle('on', cb.checked), 0)
+}
+
+async function submitTask(e) {
+  e.preventDefault()
+  const text  = document.getElementById('tf-text').value.trim()
+  const phase = document.getElementById('tf-phase').value
+  const type  = document.querySelector('input[name="tf-type"]:checked').value
+
+  let body = {text, phase, one_off_date: null, recur_days: null, recur_end: null}
+
+  if (type === 'one_off') {
+    const d = document.getElementById('tf-date').value
+    if (!d) { alert('Please pick a date.'); return }
+    body.one_off_date = d
+  } else {
+    const checked = [...document.querySelectorAll('.day-pill input:checked')].map(i => i.value)
+    if (!checked.length) { alert('Select at least one day.'); return }
+    const allDays = checked.length === 5 && ['mon','tue','wed','thu','fri'].every(d => checked.includes(d))
+    body.recur_days = allDays ? null : checked.join(',')
+    const end = document.getElementById('tf-end').value
+    if (end) body.recur_end = end
+  }
+
+  try {
+    await api('/custom-tasks', 'POST', body)
+    await loadTasks()
+  } catch(e) { alert(`Could not save: ${e.message}`) }
+}
+
+async function deleteTask(id) {
+  if (!confirm('Delete this task?')) return
+  try {
+    await api(`/custom-tasks/${id}`, 'DELETE')
+    await loadTasks()
+  } catch(e) { alert(`Could not delete: ${e.message}`) }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 LOADERS.today     = loadToday
 LOADERS.checklist = loadChecklist
+LOADERS.tasks     = loadTasks
 LOADERS.week      = loadWeek
 LOADERS.calendar  = loadCalendar
 LOADERS.hours     = loadHours

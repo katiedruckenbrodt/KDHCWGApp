@@ -99,6 +99,23 @@ class ChecklistDone(SQLModel, table=True):
     day: date
     done_at: datetime
 
+class CustomTaskIn(SQLModel):
+    text: str
+    phase: str = "Tasks"
+    one_off_date: Optional[date] = None     # set → one-off on that date
+    recur_days: Optional[str] = None        # null = every weekday; "mon,wed,fri" = specific days
+    recur_end: Optional[date] = None        # optional cutoff for recurring tasks
+
+class CustomTask(CustomTaskIn, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+class CustomTaskDone(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("task_id", "day"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key="customtask.id")
+    day: date
+    done_at: datetime
+
 
 # ---------------- Helpers ----------------
 def get_session():
@@ -137,6 +154,17 @@ def workday(d, n, hol):
 
 def nth_day(first, kind, n, hol):
     return workday(first - timedelta(days=1), n, hol) if kind == "BD" else first + timedelta(days=n - 1)
+
+def custom_task_on(t: "CustomTask", d: date) -> bool:
+    if d.weekday() >= 5:
+        return False
+    if t.one_off_date is not None:
+        return t.one_off_date == d
+    if t.recur_end and d > t.recur_end:
+        return False
+    if t.recur_days:
+        return DAYS[d.weekday()] in t.recur_days.split(",")
+    return True  # all weekdays
 
 def biweekly_on(d, anchor):
     monday = lambda x: x - timedelta(days=x.weekday())
@@ -235,6 +263,13 @@ def send_daily_alert():
             select(ChecklistDone).where(ChecklistDone.day == today)).all()}
         items = [i for i in items if not i.fridays_only or today.weekday() == 4]
         incomplete = [i for i in items if i.id not in done_ids]
+
+        custom = s.exec(select(CustomTask)).all()
+        cdone = {c.task_id for c in s.exec(
+            select(CustomTaskDone).where(CustomTaskDone.day == today)).all()}
+        for t in custom:
+            if custom_task_on(t, today) and t.id not in cdone:
+                incomplete.append(type("Item", (), {"phase": t.phase, "text": t.text})())
 
     if not incomplete:
         log.info("Daily alert: all checklist items complete — nothing to send")
@@ -336,6 +371,7 @@ app.include_router(crud(Block, BlockIn, "/blocks", "id", int, validate_block))
 app.include_router(crud(MonthlyTask, MonthlyTaskIn, "/monthly-tasks", "id", int, validate_monthly))
 app.include_router(crud(ChecklistItem, ChecklistItemIn, "/checklist-items", "id", int))
 app.include_router(crud(Holiday, HolidayIn, "/holidays", "day", date))
+app.include_router(crud(CustomTask, CustomTaskIn, "/custom-tasks", "id", int))
 
 
 # ---------------- Settings ----------------
@@ -456,9 +492,18 @@ def checklist_today(s: Session = Depends(get_session)):
 @app.get("/checklist/{d}", tags=["checklist"])
 def checklist(d: date, s: Session = Depends(get_session)):
     items = s.exec(select(ChecklistItem).order_by(ChecklistItem.sort_order)).all()
-    done = {c.item_id: c.done_at for c in s.exec(select(ChecklistDone).where(ChecklistDone.day == d)).all()}
-    out = [{**i.model_dump(), "done": i.id in done, "done_at": done.get(i.id)}
-           for i in items if not i.fridays_only or d.weekday() == 4]
+    done  = {c.item_id: c.done_at for c in s.exec(select(ChecklistDone).where(ChecklistDone.day == d)).all()}
+    out   = [{**i.model_dump(), "item_type": "checklist", "done": i.id in done, "done_at": done.get(i.id)}
+             for i in items if not i.fridays_only or d.weekday() == 4]
+
+    custom      = s.exec(select(CustomTask)).all()
+    custom_done = {c.task_id: c.done_at for c in s.exec(select(CustomTaskDone).where(CustomTaskDone.day == d)).all()}
+    for t in custom:
+        if custom_task_on(t, d):
+            out.append({"id": t.id, "item_type": "custom", "phase": t.phase, "text": t.text,
+                        "fridays_only": False, "sort_order": 9999,
+                        "done": t.id in custom_done, "done_at": custom_done.get(t.id)})
+
     return {"date": d, "complete": all(x["done"] for x in out),
             "remaining": sum(not x["done"] for x in out), "items": out}
 
@@ -475,5 +520,23 @@ def mark_done(d: date, item_id: int, s: Session = Depends(get_session)):
 @app.delete("/checklist/{d}/{item_id}", status_code=204, tags=["checklist"])
 def unmark_done(d: date, item_id: int, s: Session = Depends(get_session)):
     rec = _done_rec(s, d, item_id)
+    if rec:
+        s.delete(rec); s.commit()
+
+@app.post("/checklist/{d}/custom/{task_id}", status_code=201, tags=["checklist"])
+def mark_custom_done(d: date, task_id: int, s: Session = Depends(get_session)):
+    if not s.get(CustomTask, task_id):
+        fail(f"custom task {task_id} not found", 404)
+    rec = s.exec(select(CustomTaskDone).where(
+        CustomTaskDone.day == d, CustomTaskDone.task_id == task_id)).first()
+    if not rec:
+        rec = CustomTaskDone(task_id=task_id, day=d, done_at=local_now(s))
+        s.add(rec); s.commit(); s.refresh(rec)
+    return rec
+
+@app.delete("/checklist/{d}/custom/{task_id}", status_code=204, tags=["checklist"])
+def unmark_custom_done(d: date, task_id: int, s: Session = Depends(get_session)):
+    rec = s.exec(select(CustomTaskDone).where(
+        CustomTaskDone.day == d, CustomTaskDone.task_id == task_id)).first()
     if rec:
         s.delete(rec); s.commit()
