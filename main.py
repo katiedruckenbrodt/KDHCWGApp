@@ -116,6 +116,13 @@ class CustomTaskDone(SQLModel, table=True):
     day: date
     done_at: datetime
 
+class BlockDone(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("block_id", "week_start"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    block_id: int = Field(foreign_key="block.id")
+    week_start: date          # always the Monday of the week
+    done_at: datetime
+
 
 # ---------------- Helpers ----------------
 def get_session():
@@ -444,9 +451,39 @@ def block_view(b, d=None, anchor=None):
     return out
 
 @app.get("/schedule/week", tags=["schedule"])
-def week(s: Session = Depends(get_session)):
+def week(week_start: Optional[date] = None, s: Session = Depends(get_session)):
+    if week_start is None:
+        today = local_now(s).date()
+        week_start = today - timedelta(days=today.weekday())
+    st = settings(s)
+    day_offset = {d: i for i, d in enumerate(DAYS)}
     blocks = s.exec(select(Block).order_by(Block.start)).all()
-    return {d: [block_view(b) for b in blocks if b.day == d] for d in DAYS}
+    done_ids = {bd.block_id for bd in s.exec(
+        select(BlockDone).where(BlockDone.week_start == week_start)).all()}
+    result = {}
+    for d in DAYS:
+        day_date = week_start + timedelta(days=day_offset[d])
+        result[d] = [{**block_view(b, day_date, st.biweekly_anchor), "done": b.id in done_ids}
+                     for b in blocks if b.day == d]
+    return {"week_start": str(week_start), "days": result}
+
+@app.post("/schedule/week/{week_start}/{block_id}", status_code=201, tags=["schedule"])
+def mark_block_done(week_start: date, block_id: int, s: Session = Depends(get_session)):
+    if not s.get(Block, block_id):
+        fail(f"block {block_id} not found", 404)
+    rec = s.exec(select(BlockDone).where(
+        BlockDone.week_start == week_start, BlockDone.block_id == block_id)).first()
+    if not rec:
+        rec = BlockDone(block_id=block_id, week_start=week_start, done_at=local_now(s))
+        s.add(rec); s.commit(); s.refresh(rec)
+    return rec
+
+@app.delete("/schedule/week/{week_start}/{block_id}", status_code=204, tags=["schedule"])
+def unmark_block_done(week_start: date, block_id: int, s: Session = Depends(get_session)):
+    rec = s.exec(select(BlockDone).where(
+        BlockDone.week_start == week_start, BlockDone.block_id == block_id)).first()
+    if rec:
+        s.delete(rec); s.commit()
 
 @app.get("/schedule/today", tags=["schedule"])
 def today(s: Session = Depends(get_session)):

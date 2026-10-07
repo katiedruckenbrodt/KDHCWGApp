@@ -569,22 +569,107 @@ async function toggleItem(itemId, itemType, checked) {
 }
 
 // ── Week ──────────────────────────────────────────────────────────────────
+let weekViewStart = null
+
+function thisWeekStart() {
+  const today = new Date()
+  const diff = today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1)
+  const mon = new Date(today); mon.setDate(diff)
+  return mon.toISOString().split('T')[0]
+}
+
+function shiftWeek(iso, delta) {
+  const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + delta * 7)
+  return d.toISOString().split('T')[0]
+}
+
+function fmtWeekRange(iso) {
+  const mon = new Date(iso + 'T00:00:00')
+  const fri = new Date(iso + 'T00:00:00'); fri.setDate(fri.getDate() + 4)
+  const y = mon.getFullYear()
+  if (mon.getMonth() === fri.getMonth())
+    return `${mon.toLocaleDateString('en-US',{month:'long'})} ${mon.getDate()}–${fri.getDate()}, ${y}`
+  return `${mon.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${fri.toLocaleDateString('en-US',{month:'short',day:'numeric'})}, ${y}`
+}
+
 async function loadWeek() {
+  if (!weekViewStart) weekViewStart = thisWeekStart()
+  await fetchWeek(weekViewStart)
+}
+
+async function fetchWeek(ws) {
+  weekViewStart = ws
   const el = document.getElementById('week')
   el.innerHTML = '<p class="loading">Loading…</p>'
-  try { renderWeek(el, await api('/schedule/week')) }
+  try { renderWeek(el, await api(`/schedule/week?week_start=${ws}`)) }
   catch(e) { el.innerHTML = `<p class="error">${e.message}</p>` }
 }
 
 function renderWeek(el, data) {
   const NAMES = {mon:'Monday',tue:'Tuesday',wed:'Wednesday',thu:'Thursday',fri:'Friday'}
-  let html = ''
-  Object.entries(data).forEach(([day, blocks]) => {
-    const hrs = blocks.reduce((s,b)=>s + (b.category!=='Lunch'?b.hours:0), 0)
-    html += `<div class="section-label">${NAMES[day]} <span style="font-weight:400">${hrs.toFixed(2)}h worked</span></div>`
-    blocks.forEach(b => { html += blockCard(b, true) })
+  const ws = data.week_start
+
+  let html = `
+    <div class="month-nav" style="margin-bottom:1.25rem">
+      <button class="nav-btn" onclick="fetchWeek('${shiftWeek(ws,-1)}')">‹</button>
+      <h2 style="font-size:1.1rem">${fmtWeekRange(ws)}</h2>
+      <button class="nav-btn" onclick="fetchWeek('${shiftWeek(ws,1)}')">›</button>
+    </div>`
+
+  Object.entries(data.days).forEach(([day, blocks]) => {
+    const hrs    = blocks.reduce((s,b) => s + (b.category !== 'Lunch' ? b.hours : 0), 0)
+    const total  = blocks.length
+    const done   = blocks.filter(b => b.done).length
+    const allDone = done === total && total > 0
+
+    html += `
+      <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+        <span>${NAMES[day]} <span style="font-weight:400">${hrs.toFixed(2)}h</span></span>
+        <span style="font-weight:400;font-size:.72rem;color:${allDone?'var(--green)':'var(--muted)'}">${done}/${total} done</span>
+      </div>`
+
+    blocks.forEach(b => {
+      const c      = clr(b.category)
+      const isOff  = b.biweekly && b.active === false
+      const taskHtml = b.tasks
+        ? `<button class="expand-btn" onclick="toggleTasks(this)">▸ Show tasks</button>
+           <div class="block-tasks">${tasks2html(b.tasks)}</div>`
+        : ''
+      const bwLabel = b.biweekly ? `<span style="font-size:.72rem;color:var(--muted)"> · Biweekly</span>` : ''
+      const note    = isOff ? `<div class="block-note">${b.note}</div>` : ''
+
+      html += `
+        <div style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.5rem">
+          <input type="checkbox" class="checklist-cb" style="margin-top:.85rem;flex-shrink:0"
+            ${b.done ? 'checked' : ''}
+            onchange="toggleBlock('${ws}', ${b.id}, this.checked)">
+          <div class="block-card${isOff?' dim':''}" style="--cat-color:${c};flex:1;margin-bottom:0;
+            ${b.done ? 'opacity:.5;' : ''}">
+            <div class="block-time">${fmtTime(b.start)}<br>↓<br>${fmtTime(b.end)}</div>
+            <div>
+              <div class="block-label" style="${b.done ? 'text-decoration:line-through' : ''}">${b.label}${bwLabel}</div>
+              ${note}${taskHtml}
+            </div>
+            <div class="block-meta">
+              <span class="badge" style="background:${c}">${b.category}</span>
+              <span class="hours-pill">${b.hours}h</span>
+            </div>
+          </div>
+        </div>`
+    })
   })
+
   el.innerHTML = html
+}
+
+async function toggleBlock(weekStart, blockId, checked) {
+  try {
+    await api(`/schedule/week/${weekStart}/${blockId}`, checked ? 'POST' : 'DELETE')
+    await fetchWeek(weekStart)
+  } catch(e) {
+    alert(`Could not update: ${e.message}`)
+    fetchWeek(weekStart)
+  }
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────────
